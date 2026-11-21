@@ -136,13 +136,15 @@ struct ImportScreen: View {
                             if gross > 0 { LabeledContent(kind.rawValue, value: money(gross - covered)) }
                         }
                         if !plan.replacements.isEmpty {
-                            Text("Из ранее учтённых сводок будет вычтено " + money(plan.replacements.reduce(0) { $0 + $1.0.cents - $1.1 }) + " — теперь эта сумма подтверждена покупками.").font(.caption)
+                            let covered: Int64 = plan.replacements.reduce(0) { $0 + $1.0.cents - $1.1 }
+                            Text("Из ранее учтённых сводок будет вычтено \(money(covered)) — теперь эта сумма подтверждена покупками.").font(.caption)
                         }
                         let changes = plan.balanceChanges(accounts: accounts)
                         if !changes.isEmpty {
                             DisclosureGroup("Остатки после импорта") {
                                 ForEach(accounts.filter { changes[$0.id] != nil }) { acct in
-                                    LabeledContent(acct.position.title, value: money(acct.position.amount) + " → " + money(acct.position.amount + (changes[acct.id] ?? 0)))
+                                    let after: Int64 = acct.position.amount + (changes[acct.id] ?? 0)
+                                    LabeledContent(acct.position.title, value: "\(money(acct.position.amount)) → \(money(after))")
                                 }
                             }
                         }

@@ -95,10 +95,12 @@ struct LotsPanel: View {
                 let profit = group.reduce(Int64(0)) { $0 + $1.profit }
                 VStack(alignment: .leading, spacing: 6) {
                     Text(lot.name + " · " + lot.date.formatted(date: .numeric, time: .omitted)).bold()
-                    Text("Осталось " + (Decimal(left) / 1_000_000).formatted() + " " + lot.unit + " · Прибыль " + money(profit))
+                    let units: String = (Decimal(left) / 1_000_000).formatted()
+                    Text("Осталось \(units) \(lot.unit) · Прибыль \(money(profit))")
                     ForEach(group.sorted { $0.date < $1.date }) { item in
                         HStack {
-                            Text((item.units > 0 ? "Покупка " : "Продажа ") + item.date.formatted(date: .numeric, time: .omitted) + " · " + money(item.gross)).font(.caption)
+                            let kind: String = item.units > 0 ? "Покупка" : "Продажа"
+                            Text("\(kind) \(item.date.formatted(date: .numeric, time: .omitted)) · \(money(item.gross))").font(.caption)
                             Spacer()
                             if LotMovement.changeable(item, in: movements) {
                                 Button("Изменить") { open(item, movements: movements) }.font(.caption)
@@ -402,7 +404,7 @@ struct PeriodPanel: View {
             }
             if span == .month && period.end <= Date.now, let positions = state(at: period.end), let capital = net(positions) {
                 let versions = closes.filter { $0.monthKey == Charity.key(period.start) }
-                if let latest = versions.first { Text("Версий закрытия: " + String(versions.count) + " · " + latest.saved.formatted()).font(.caption) }
+                if let latest = versions.first { Text("Версий закрытия: \(versions.count) · \(latest.saved.formatted())").font(.caption) }
                 Button(versions.isEmpty ? "Закрыть месяц" : "Сохранить новую версию закрытия") {
                     do {
                         let close = Closing(end: period.end, saved: .now, positions: Dictionary(uniqueKeysWithValues: positions.map { ($0.id,$0.position.amount) }), titles: Dictionary(uniqueKeysWithValues: positions.map { ($0.id,$0.position.title) }), capital: capital, quoteRecords: Dictionary(checkpoints.filter { $0.date < period.end && $0.valuationSource != nil }.sorted { $0.date < $1.date }.compactMap { row in row.valuationSource.map { (row.key, $0) } }, uniquingKeysWith: { _, new in new }), values: summary(period, closes: closes, freeze: false), month: Charity.key(period.start))

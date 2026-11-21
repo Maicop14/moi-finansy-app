@@ -130,6 +130,11 @@ enum RecurringStore {
 }
 
 struct RecurringScreen: View {
+    static func detailLine(_ item: RecurringPayment, accounts: [AccountBalance]) -> String {
+        let sub: String = item.subcategory.map { " › " + $0 } ?? ""
+        let card: String = accounts.first { $0.id == item.accountKey }?.position.title ?? "счёт не выбран"
+        return "\(item.frequencyText) · \(item.category)\(sub) · \(card)"
+    }
     let accounts: [AccountBalance]
     @Query private var records: [FinanceRecord]
     @Environment(\.modelContext) private var context
@@ -165,8 +170,9 @@ struct RecurringScreen: View {
             Button("Записать расход") { markPaid(item) }
             Button("Отмена", role: .cancel) {}
         } message: { item in
-            Text(item.title + ": " + money(RecurringMath.rub(item, prices: prices)) + " со счёта «" +
-                 (accounts.first { $0.id == item.accountKey }?.position.title ?? "—") + "». Остаток счёта уменьшится, следующий платёж сдвинется.")
+            let sum: String = money(RecurringMath.rub(item, prices: prices))
+            let card: String = accounts.first { $0.id == item.accountKey }?.position.title ?? "—"
+            Text("\(item.title): \(sum) со счёта «\(card)». Остаток счёта уменьшится, следующий платёж сдвинется.")
         }
         .onAppear { RecurringStore.syncReminders(list) }
         .onChange(of: records.count) { _, _ in RecurringStore.syncReminders(RecurringStore.payments(records)) }
@@ -183,8 +189,7 @@ struct RecurringScreen: View {
                     Spacer()
                     Text(item.amountText).monospacedDigit().bold()
                 }
-                Text(item.frequencyText + " · " + item.category + (item.subcategory.map { " › " + $0 } ?? "")
-                     + " · " + (accounts.first { $0.id == item.accountKey }?.position.title ?? "счёт не выбран"))
+                Text(Self.detailLine(item, accounts: accounts))
                     .font(.caption).foregroundStyle(Palette.secondary)
                 if item.active {
                     let overdue = item.next < calendar.startOfDay(for: .now)
@@ -337,6 +342,11 @@ struct BudgetPlan: Equatable {
 }
 
 enum BudgetMath {
+    static func spentLine(used: Int64, limit: Int64) -> String {
+        let spent: String = money(used)
+        guard limit > 0 else { return "Потрачено \(spent) · лимит не задан" }
+        return used <= limit ? "Потрачено \(spent) · осталось \(money(limit - used))" : "Потрачено \(spent) · перерасход \(money(used - limit))"
+    }
     static func key(_ date: Date) -> Int { Charity.key(date) }
     static func next(_ month: Int, by delta: Int = 1) -> Int { Charity.key(Charity.calendar.date(byAdding: .month, value: delta, to: Charity.start(month))!) }
 
@@ -478,7 +488,7 @@ struct BudgetScreen: View {
                     if limit > 0 || used > 0 {
                         let tint: Color = switch BudgetMath.level(limit: limit, actual: used) { case .ok: Palette.positive; case .warning: .orange; case .over: Palette.negative }
                         ProgressView(value: Double(min(used, max(limit, 1))), total: Double(max(limit, 1))).tint(tint)
-                        Text("Потрачено " + money(used) + (limit > 0 ? (used <= limit ? " · осталось " + money(limit - used) : " · перерасход " + money(used - limit)) : " · лимит не задан"))
+                        Text(BudgetMath.spentLine(used: used, limit: limit))
                             .font(.caption).foregroundStyle(tint == Palette.positive ? Palette.secondary : tint)
                     }
                 }

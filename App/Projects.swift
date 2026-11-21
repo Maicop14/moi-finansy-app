@@ -119,7 +119,7 @@ private struct ProjectCard: View {
             LabeledContent("Долг проекту") { Text(money(progress.remaining)).font(.title2.bold()).monospacedDigit() }
             ProgressView(value: Double(progress.saved), total: Double(max(project.total, 1))).tint(Palette.positive)
             HStack {
-                Text("Сэкономлено " + money(progress.saved) + " из " + money(project.total))
+                Text("Сэкономлено \(money(progress.saved)) из \(money(project.total))")
                 Spacer()
                 Text(progress.monthsLeft == 0 ? "Готово" : "Осталось " + ReminderPlan.months(progress.monthsLeft))
             }.font(.caption)
@@ -127,7 +127,7 @@ private struct ProjectCard: View {
                 Text(progress.lead >= 0 ? "Опережение графика: " + money(progress.lead) : "Отставание от графика: " + money(-progress.lead))
                     .font(.subheadline.weight(.semibold)).foregroundStyle(progress.lead >= 0 ? Palette.positive : Palette.negative)
             } else if progress.remaining > 0 {
-                Text("Первый взнос — " + Charity.title(project.firstMonth) + ", по " + money(project.monthly) + " в месяц").font(.subheadline)
+                Text("Первый взнос — \(Charity.title(project.firstMonth)), по \(money(project.monthly)) в месяц").font(.subheadline)
             }
             DisclosureGroup("График на " + ReminderPlan.months(project.months), isExpanded: $showSchedule) {
                 ForEach(project.schedule, id: \.month) { item in

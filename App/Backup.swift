@@ -295,19 +295,23 @@ struct RestoredLedger: View {
     @State private var ready = false
     @State private var welcome = WelcomeScene.now
     @State private var failed = false
+    /// The main screen; on iPhone it also writes the automatic copy once an hour while open.
+    @ViewBuilder private var ledger: some View {
+        #if os(iOS)
+        Ledger(pendingURL: $pendingURL).id(generation)
+            .task(id: generation) {
+                while !Task.isCancelled {
+                    if !DemoMode.isOn { await PhoneCloudBackup.run(context) }
+                    do { try await Task.sleep(for: .seconds(3600)) } catch { return }
+                }
+            }
+        #else
+        Ledger(pendingURL: $pendingURL).id(generation)
+        #endif
+    }
     var body: some View {
         Group {
-            if ready {
-                Ledger(pendingURL: $pendingURL).id(generation)
-                #if os(iOS)
-                    .task(id: generation) {
-                        while !Task.isCancelled {
-                            if !DemoMode.isOn { await PhoneCloudBackup.run(context) }
-                            do { try await Task.sleep(for: .seconds(3600)) } catch { return }
-                        }
-                    }
-                #endif
-            }
+            if ready { ledger }
             else if failed { Text("Не удалось загрузить настройки восстановленной базы.") }
             else { WelcomeScreen(scene: welcome) }
         }.task {

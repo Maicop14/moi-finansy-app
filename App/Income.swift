@@ -92,6 +92,13 @@ enum IncomeMath {
 private struct IncomeSelection: Identifiable { let id = UUID(); var plan: IncomePlan? }
 
 struct IncomeScreen: View {
+    static func kindLine(_ plan: IncomePlan) -> String {
+        if plan.kind.bank {
+            let rate: String = (Decimal(plan.rateBP) / 100).formatted()
+            return "\(plan.kind.rawValue) · \(rate)% годовых"
+        }
+        return plan.monthly ? plan.kind.rawValue + " · ежемесячно до декабря" : plan.kind.rawValue
+    }
     @Query(sort: \IncomePlan.payout) private var plans: [IncomePlan]
     let entries: [Entry]
     let accounts: [AccountBalance]
@@ -114,7 +121,7 @@ struct IncomeScreen: View {
             Button { selection = IncomeSelection(plan: plan) } label: {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(plan.title).font(.headline)
-                    Text(plan.kind.rawValue + (plan.kind.bank ? " · " + (Decimal(plan.rateBP) / 100).formatted() + "% годовых" : plan.monthly ? " · ежемесячно до декабря" : ""))
+                    Text(Self.kindLine(plan))
                     Text(plan.payout, style: .date).font(.caption)
                     Text("Ожидается " + money(plan.gross)).bold()
                 }.frame(maxWidth: .infinity, alignment: .leading).padding().background(.background, in: RoundedRectangle(cornerRadius: 16))

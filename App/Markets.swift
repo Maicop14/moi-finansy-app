@@ -235,6 +235,11 @@ struct MarketView: View {
 }
 
 private struct HoldingTile: View {
+    static func priceLine(_ holding: Holding, prices: MarketPrices) -> String {
+        let price: String = prices.unitPrice(holding).formatted(.number.precision(.fractionLength(0...4)))
+        let when: String = holding == .crypto ? prices.currencyDate : prices.metalsChecked.formatted(date: .numeric, time: .shortened)
+        return "\(price) ₽/\(holding.unit) · \(when)"
+    }
     let holding: Holding
     let account: AccountBalance
     let prices: MarketPrices
@@ -277,8 +282,7 @@ private struct HoldingTile: View {
             }
             .onDisappear { if valuation != nil { savedQuantity = quantity } }
             Text(holding.rule).font(.subheadline)
-            Text(prices.unitPrice(holding).formatted(.number.precision(.fractionLength(0...4))) + " ₽/" + holding.unit + " · " +
-                 (holding == .crypto ? prices.currencyDate : prices.metalsChecked.formatted(date: .numeric, time: .shortened)))
+            Text(Self.priceLine(holding, prices: prices))
                 .font(.caption).foregroundStyle(.secondary)
             Text("В капитале: " + money(account.position.amount)).font(.caption)
             Text("Оценка по этой цене автоматически входит в капитал.").font(.caption).foregroundStyle(.secondary)
@@ -353,7 +357,9 @@ struct CurrencyRatesNote: View {
     var body: some View {
         let rate = { (value: Decimal) in value.formatted(.number.precision(.fractionLength(2)).locale(Locale(identifier: "ru_RU"))) + " ₽" }
         let euro = " · € " + (prices.eur.map(rate) ?? "курс недоступен")
-        Text((loading ? "Обновляю курс… " : "") + "Курс ЦБ на " + prices.currencyDate + ": $ " + rate(prices.usd) + euro)
+        let prefix: String = loading ? "Обновляю курс… " : ""
+        let usd: String = rate(prices.usd)
+        Text("\(prefix)Курс ЦБ на \(prices.currencyDate): $ \(usd)\(euro)")
             .font(.caption).foregroundStyle(Palette.secondary).monospacedDigit()
     }
 }

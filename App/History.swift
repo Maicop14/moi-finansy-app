@@ -319,6 +319,13 @@ struct AnalyticsCard<Content: View>: View {
 }
 
 struct PortfolioOverview: View {
+    /// «▲ +5 000 ₽ (+1,2 %) к отчёту «Август 2026»» — built outside the view body for older compilers.
+    static func changeLine(delta: Int64, shown: String, share: String?, report: String) -> String {
+        if delta == 0 { return "Без изменений к отчёту «\(report)»" }
+        let arrow: String = delta > 0 ? "▲ +" : "▼ "
+        let percentText: String = share.map { (delta > 0 ? " (+" : " (") + $0 + ")" } ?? ""
+        return "\(arrow)\(shown)\(percentText) к отчёту «\(report)»"
+    }
     @Environment(\.modelContext) private var context
     let accounts: [AccountBalance]
     @Query private var entries: [Entry]
@@ -409,9 +416,7 @@ struct PortfolioOverview: View {
                 .lineLimit(1).minimumScaleFactor(0.5).contentTransition(.numericText())
             if let delta = summary.change {
                 let tone = delta > 0 ? Palette.positive : delta < 0 ? Palette.negative : Palette.secondary
-                let share = summary.changeShare.map { " (" + ($0 > 0 ? "+" : "") + percent($0) + ")" } ?? ""
-                Text(delta == 0 ? "Без изменений к отчёту «" + (summary.previous?.title ?? "") + "»"
-                     : (delta > 0 ? "▲ +" : "▼ ") + shown(delta) + share + " к отчёту «" + (summary.previous?.title ?? "") + "»")
+                Text(Self.changeLine(delta: delta, shown: shown(delta), share: summary.changeShare.map(percent), report: summary.previous?.title ?? ""))
                     .font(.subheadline.weight(.medium)).foregroundStyle(tone)
             }
             Divider()
