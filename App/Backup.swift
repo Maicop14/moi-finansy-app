@@ -341,6 +341,11 @@ struct BackupFile: FileDocument {
 }
 
 struct BackupPanel: View {
+    /// Kept out of the view body: one long string concatenation is too slow for some compiler versions to type-check.
+    static func summary(_ copy: LedgerCopy) -> String {
+        let date = copy.date.formatted()
+        return "Копия от \(date). Операций: \(copy.entries.count), выписок: \(copy.sources.count), сверок: \(copy.accounts.count)"
+    }
     @Environment(\.modelContext) private var context
     @State private var quickRestore = false
     @State private var password = ""
@@ -381,7 +386,7 @@ struct BackupPanel: View {
             #endif
             if busy { ProgressView() }
             if let copy = preview {
-                Text("Копия от " + copy.date.formatted() + ". Операций: " + String(copy.entries.count) + ", выписок: " + String(copy.sources.count) + ", сверок: " + String(copy.accounts.count))
+                Text(Self.summary(copy))
                 Button("Восстановить эту копию…") { confirming = true }.disabled(busy)
             }
             Button("Экспорт журнала и партий · JSON без пароля…") {

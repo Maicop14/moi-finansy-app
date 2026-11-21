@@ -13,6 +13,12 @@ private struct StatementPhoto: Transferable {
 }
 
 struct ImportScreen: View {
+    /// «Новых: N · Уже есть: M · До даты остатков: K» — kept out of the body so older compilers type-check it quickly.
+    static func counts(_ plan: ImportPlan) -> String {
+        let fresh = plan.additions.count, before = plan.beforeCutoff.count, known = plan.skipped.count - before
+        return "Новых: \(fresh) · Уже есть: \(known) · До даты остатков: \(before)"
+    }
+
     let accounts: [AccountBalance]
     let incoming: [URL]
     let completed: (Int, [URL]) -> Void
@@ -123,8 +129,7 @@ struct ImportScreen: View {
                                 Divider()
                             }
                         }
-                        Text("Новых: " + String(plan.additions.count) + " · Уже есть: " + String(plan.skipped.count - plan.beforeCutoff.count)
-                             + " · До даты остатков: " + String(plan.beforeCutoff.count)).font(.headline)
+                        Text(Self.counts(plan)).font(.headline)
                         ForEach([Flow.income, .expense, .transfer]) { kind in
                             let gross = plan.additions.filter { $0.0.flow == kind }.reduce(Int64.zero) { $0 + $1.1 }
                             let covered = plan.replacements.filter { $0.0.kind == kind.rawValue }.reduce(Int64.zero) { $0 + $1.0.cents - $1.1 }

@@ -170,14 +170,23 @@ struct NetWorthChanges: View {
         .help("Сравнение с последним значением прошлого дня и с 21 ноября. Учитываются и котировки, и операции.")
     }
 
+    /// "+1,2 %", "−0,4 %" or "0,0 %".
+    static func percent(_ share: Double?) -> String {
+        guard let share else { return "0,0 %" }
+        let sign: String = share > 0 ? "+" : (share < 0 ? "−" : "")
+        let value: String = abs(share).formatted(.percent.precision(.fractionLength(1)).locale(Locale(identifier: "ru_RU")))
+        return sign + value
+    }
+
     @ViewBuilder private func chip(_ title: String, _ change: NetWorthHistory.Change?) -> some View {
         let cents = change?.cents ?? 0
         let tone = cents > 0 ? Palette.positive : cents < 0 ? Palette.negative : Palette.secondary
-        let percent = change?.share.map { ($0 > 0 ? "+" : $0 < 0 ? "−" : "") + abs($0).formatted(.percent.precision(.fractionLength(1)).locale(Locale(identifier: "ru_RU"))) } ?? "0,0 %"
-        let amount = (cents > 0 ? "+" : cents < 0 ? "−" : "") + format(abs(cents))
+        let sign: String = cents > 0 ? "+" : (cents < 0 ? "−" : "")
+        let percent = Self.percent(change?.share)
+        let amount = "\(sign)\(format(abs(cents)))"
         HStack(spacing: 4) {
             Image(systemName: cents > 0 ? "arrow.up.right" : cents < 0 ? "arrow.down.right" : "equal").font(.caption2.bold())
-            Text(percent + " (" + amount + ")").monospacedDigit()
+            Text("\(percent) (\(amount))").monospacedDigit()
             Text(title).foregroundStyle(tone.opacity(0.75))
         }
         .font(.caption.weight(.semibold)).foregroundStyle(tone).lineLimit(1).minimumScaleFactor(0.7)
