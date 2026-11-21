@@ -106,7 +106,9 @@ struct ImportTests {
         #expect(try ModelContext(db).fetch(FetchDescriptor<StatementSource>()).map(\.bytes) == [doc.bytes])
     }
 
-    @MainActor @Test func localImageAndPDF() throws {
+    // Text recognition (Vision) is not available on GitHub-hosted virtual machines; this runs on a Mac.
+    @MainActor @Test(.enabled(if: ProcessInfo.processInfo.environment["CI"] == nil, "Распознавание текста недоступно на серверах CI"))
+    func localImageAndPDF() throws {
         let image = NSImage(size: NSSize(width: 1100, height: 220))
         image.lockFocus()
         NSColor.white.setFill(); NSBezierPath(rect: CGRect(origin: .zero, size: image.size)).fill()
