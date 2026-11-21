@@ -15,13 +15,13 @@ permissions:
 jobs:
   codeql:
     name: CodeQL — безопасность и качество (Swift)
-    runs-on: macos-latest
+    runs-on: xcode-27   # тот же Xcode 27, что и для сборки приложения
     permissions:
       contents: read
       actions: read
       security-events: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: github/codeql-action/init@v4
         with:
@@ -30,7 +30,10 @@ jobs:
           queries: security-and-quality
 
       - name: Сборка
-        run: swift build
+        run: |
+          set -o pipefail
+          xcodebuild -version
+          swift build 2>&1 | tee build.log || { grep -E "error:" build.log | head -20 | sed 's/^/::error::/'; exit 1; }
 
       - uses: github/codeql-action/analyze@v4
         with:
@@ -68,8 +71,11 @@ jobs:
 
   tests:
     name: Тесты (swift test)
-    runs-on: macos-latest
+    runs-on: xcode-27   # тот же Xcode 27, что и для сборки приложения
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Тесты
-        run: swift test
+        run: |
+          set -o pipefail
+          xcodebuild -version
+          swift test 2>&1 | tee test.log || { grep -E "error:|✘|failed" test.log | head -25 | sed 's/^/::error::/'; exit 1; }
