@@ -1,0 +1,26 @@
+.DS_Store
+.build/
+DerivedData/
+*.app
+*.dSYM/
+xcuserdata/
+*.xcuserstate
+PersonalArchive/
+App/ArchiveResources/Local/
+App/history.json
+App/OriginalBudget.xlsx
+*.store
+*.store-shm
+*.store-wal
+*.mobileprovision
+*.p12
+*.p8
+.env
+Backups/
+
+# Личные материалы рядом с проектом: никогда не попадают в Git
+Мои Финансы — */
+Мои Финансы — *.mp4
+Мои Финансы — *.txt
+*.mp4
+*.kdfin

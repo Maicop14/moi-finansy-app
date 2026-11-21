@@ -1,0 +1,193 @@
+{
+  "months": [
+    {
+      "title": "Демонстрационный снимок",
+      "capital": 0,
+      "note": "Пустой пример для сборки из Git.",
+      "lines": [
+        {
+          "title": "Наличные",
+          "amount": 0,
+          "note": ""
+        },
+        {
+          "title": "Электронный кошелёк",
+          "amount": 0,
+          "note": ""
+        },
+        {
+          "title": "Наличная валюта",
+          "amount": 0,
+          "note": ""
+        },
+        {
+          "title": "Расчётный счёт",
+          "amount": 0,
+          "note": ""
+        },
+        {
+          "title": "Начисления",
+          "amount": 0,
+          "note": ""
+        },
+        {
+          "title": "Накопительный счёт",
+          "amount": 0,
+          "note": ""
+        },
+        {
+          "title": "Дебетовая карта",
+          "amount": 0,
+          "note": ""
+        },
+        {
+          "title": "Золото",
+          "amount": 0,
+          "note": ""
+        },
+        {
+          "title": "Серебро",
+          "amount": 0,
+          "note": ""
+        },
+        {
+          "title": "Обеспечение",
+          "amount": 0,
+          "note": ""
+        },
+        {
+          "title": "Имущество",
+          "amount": 0,
+          "note": ""
+        },
+        {
+          "title": "Цифровые активы",
+          "amount": 0,
+          "note": ""
+        },
+        {
+          "title": "Заём 1",
+          "amount": 0,
+          "note": ""
+        },
+        {
+          "title": "Заём 2",
+          "amount": 0,
+          "note": ""
+        },
+        {
+          "title": "Заём 3",
+          "amount": 0,
+          "note": ""
+        },
+        {
+          "title": "Кредитная карта 1",
+          "amount": 0,
+          "note": ""
+        },
+        {
+          "title": "Кредитная карта 2",
+          "amount": 0,
+          "note": ""
+        },
+        {
+          "title": "Кредитная карта 3",
+          "amount": 0,
+          "note": ""
+        }
+      ]
+    }
+  ],
+  "positions": [
+    {
+      "title": "Наличные",
+      "amount": 0,
+      "debt": false
+    },
+    {
+      "title": "Электронный кошелёк",
+      "amount": 0,
+      "debt": false
+    },
+    {
+      "title": "Наличная валюта",
+      "amount": 0,
+      "debt": false
+    },
+    {
+      "title": "Расчётный счёт",
+      "amount": 0,
+      "debt": false
+    },
+    {
+      "title": "Начисления",
+      "amount": 0,
+      "debt": false
+    },
+    {
+      "title": "Накопительный счёт",
+      "amount": 0,
+      "debt": false
+    },
+    {
+      "title": "Дебетовая карта",
+      "amount": 0,
+      "debt": false
+    },
+    {
+      "title": "Золото",
+      "amount": 0,
+      "debt": false
+    },
+    {
+      "title": "Серебро",
+      "amount": 0,
+      "debt": false
+    },
+    {
+      "title": "Обеспечение",
+      "amount": 0,
+      "debt": false
+    },
+    {
+      "title": "Имущество",
+      "amount": 0,
+      "debt": false
+    },
+    {
+      "title": "Цифровые активы",
+      "amount": 0,
+      "debt": false
+    },
+    {
+      "title": "Заём 1",
+      "amount": 0,
+      "debt": false
+    },
+    {
+      "title": "Заём 2",
+      "amount": 0,
+      "debt": false
+    },
+    {
+      "title": "Заём 3",
+      "amount": 0,
+      "debt": false
+    },
+    {
+      "title": "Кредитная карта 1",
+      "amount": 0,
+      "debt": true
+    },
+    {
+      "title": "Кредитная карта 2",
+      "amount": 0,
+      "debt": true
+    },
+    {
+      "title": "Кредитная карта 3",
+      "amount": 0,
+      "debt": true
+    }
+  ]
+}

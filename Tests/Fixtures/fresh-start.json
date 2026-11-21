@@ -1,0 +1,42 @@
+{
+ "about": "Вымышленные данные для тестов. Структура как у App/ArchiveResources/Local/fresh-start.json.",
+ "validUntil": "2026-11-30",
+ "accounts": [
+  {"key": "excel-20260901-0", "title": "Наличные", "rub": "10000"},
+  {"key": "excel-20260901-3", "title": "Карта A", "rub": "2500.50"},
+  {"key": "excel-20260901-4", "title": "Валютная карта · $50", "usd": "50"},
+  {"key": "excel-20260901-7", "title": "Золото", "grams": "10"},
+  {"key": "excel-20260901-8", "title": "Серебро", "grams": "20"},
+  {"key": "excel-20260901-11", "title": "Крипта", "grams": "0"},
+  {"key": "excel-20260901-9", "title": "Обеспечение", "rub": "0"},
+  {"key": "account-project-coffee", "title": "Проект", "rub": "12000"},
+  {"key": "excel-20260901-12", "title": "Друг 1", "rub": "5000"},
+  {"key": "receivable-test-friend-2", "title": "Друг 2", "rub": "1500"},
+  {"key": "excel-20260901-15", "title": "Кредитная карта 1", "rub": "30000", "debt": true},
+  {"key": "excel-20260901-16", "title": "Кредитная карта 2", "rub": "4000.25", "debt": true}
+ ],
+ "hidden": ["excel-20260901-9", "excel-20260901-11"],
+ "payments": [
+  {"id": "card1-2026-11", "title": "Кредитная карта 1", "amount": "12000", "minimum": "900", "due": "2026-11-29"},
+  {"id": "card2-2026-12", "title": "Кредитная карта 2", "amount": "4000.25", "due": "2026-12-09"}
+ ],
+ "project": {"title": "Проект", "total": "12000", "months": 4, "firstMonth": 202612, "accountKey": "account-project-coffee"},
+ "plans": [
+  {"title": "Зарплата", "kind": "Зарплата", "amount": "0", "payout": "2026-11-28", "monthly": true},
+  {"title": "Проценты", "kind": "Дополнительный доход", "amount": "150.40", "payout": "2026-11-30", "exempt": true},
+  {"title": "Накопительный счёт", "kind": "Накопительный счёт", "amount": "100000", "payout": "2026-12-31", "start": "2026-11-30", "rate": "10.5"}
+ ],
+ "donation": {"rub": "1000", "day": 10, "forMonth": 202610, "note": "Перечислено", "account": "excel-20260901-15"},
+ "spendingMonth": 202611,
+ "spending": [
+  {"day": 3, "rub": "300", "category": "Кафе", "note": "Кофейня", "account": "excel-20260901-15"},
+  {"day": 5, "rub": "900", "category": "Кафе", "note": "Бургерная", "account": "excel-20260901-15"},
+  {"day": 6, "rub": "450", "category": "Кафе", "note": "Ресторан · итого", "account": "excel-20260901-16"},
+  {"day": 7, "rub": "1200.50", "category": "Продукты", "note": "Супермаркет · итого", "account": "excel-20260901-15"},
+  {"day": 8, "rub": "700", "category": "Продукты", "note": "Самокат, доставка", "account": "excel-20260901-16"},
+  {"day": 9, "rub": "250", "category": "Транспорт", "note": "Такси", "account": "excel-20260901-15"},
+  {"day": 9, "rub": "120", "category": "Транспорт", "note": "Самокаты", "account": "excel-20260901-16"},
+  {"day": 11, "usd": "10", "category": "Подписки", "note": "Подписка, 10 $", "account": "excel-20260901-4"}
+ ],
+ "transfers": [{"day": 12, "rub": "5000", "from": "excel-20260901-16", "to": "excel-20260901-0", "note": "Выдача наличных"}]
+}
