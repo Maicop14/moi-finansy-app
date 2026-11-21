@@ -1,0 +1,75 @@
+name: Проверка кода
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * 1"   # каждый понедельник
+
+permissions:
+  contents: read
+
+jobs:
+  codeql:
+    name: CodeQL — безопасность и качество (Swift)
+    runs-on: macos-latest
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: swift
+          build-mode: manual
+          queries: security-and-quality
+
+      - name: Сборка
+        run: swift build
+
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:swift"
+          output: sarif-results
+
+      - name: Сводка находок
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import glob, json, os
+          rows = []
+          for path in glob.glob("sarif-results/*.sarif"):
+              data = json.load(open(path))
+              for run in data.get("runs", []):
+                  rules = {r["id"]: r for r in run.get("tool", {}).get("driver", {}).get("rules", [])}
+                  for res in run.get("results", []):
+                      loc = res.get("locations", [{}])[0].get("physicalLocation", {})
+                      file = loc.get("artifactLocation", {}).get("uri", "?")
+                      line = loc.get("region", {}).get("startLine", "?")
+                      rule = res.get("ruleId", "?")
+                      severity = rules.get(rule, {}).get("properties", {}).get("problem.severity", res.get("level", ""))
+                      text = res.get("message", {}).get("text", "").replace("\n", " ").replace("|", "/")
+                      rows.append((severity, rule, f"{file}:{line}", text[:200]))
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as out:
+              out.write(f"## CodeQL: находок {len(rows)}\n\n")
+              if rows:
+                  out.write("| Уровень | Правило | Где | Описание |\n|---|---|---|---|\n")
+                  for r in sorted(rows):
+                      out.write("| " + " | ".join(str(x) for x in r) + " |\n")
+              else:
+                  out.write("Замечаний нет.\n")
+          print("findings:", len(rows))
+          PY
+
+  tests:
+    name: Тесты (swift test)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Тесты
+        run: swift test
