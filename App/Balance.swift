@@ -52,15 +52,29 @@ func money(_ cents: Int64) -> String {
 
 @main struct BalanceApp: App {
     @StateObject private var gate = AppLock()
+    #if os(macOS)
+    @NSApplicationDelegateAdaptor(MacAppDelegate.self) private var delegate
+    #endif
     /// The delegate is set before launch finishes, so a tap on a notification that opened the app is not lost.
-    init() { UNUserNotificationCenter.current().delegate = NotificationRouter.shared }
+    init() {
+        UNUserNotificationCenter.current().delegate = NotificationRouter.shared
+        #if SNAPSHOTS && os(macOS)
+        WindowSnapshots.run()
+        #endif
+    }
     var body: some Scene {
         WindowGroup {
             LockedRoot(gate: gate).environment(\.locale, Locale(identifier: "ru_RU"))
         }.modelContainer(for: [Entry.self, Checkpoint.self, StatementSource.self, IncomePlan.self, BackupInstall.self, FinanceRecord.self],
                          inMemory: DemoMode.isOn)
         #if os(macOS)
-        .defaultSize(width: 1060, height: 720)
+        .defaultSize(width: 1100, height: 740)
+        .windowResizability(.contentMinSize)
+        .windowToolbarStyle(.unified)
+        .commands { LedgerCommands(gate: gate) }
+        #endif
+        #if os(macOS)
+        Settings { MacSettings(gate: gate).environment(\.locale, Locale(identifier: "ru_RU")) }
         #endif
     }
 }
@@ -92,6 +106,157 @@ private enum BankPage: String, CaseIterable, Identifiable {
     }
 }
 
+extension BankPage {
+    /// Sidebar groups on the Mac, in the order of the menu «Раздел» (⌘1…⌘9 for the first nine).
+    static let sidebar: [(title: String, pages: [BankPage])] = [
+        ("Обзор", [.home, .capital]),
+        ("Деньги", [.operations, .accounts, .earnings, .investments]),
+        ("Долги", [.loans, .receivables]),
+        ("Планирование", [.budget, .recurring, .charity]),
+        ("Данные", [.restore]),
+    ]
+}
+
+/// Menu bar commands, delivered to the open main window through the notification centre.
+enum LedgerCommand: String {
+    case newExpense, newIncome, newTransfer, importStatements, search, refreshQuotes, backup, restore
+    static let notification = Notification.Name("kd.ledger.command")
+    static func send(_ raw: String) { NotificationCenter.default.post(name: notification, object: raw) }
+}
+
+#if os(macOS)
+/// Closing the window quits the app, so the next start asks for the PIN or Touch ID again;
+/// minimising keeps it open where it was.
+final class MacAppDelegate: NSObject, NSApplicationDelegate {
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+}
+
+/// The macOS menu bar: «Файл», «Правка → Найти», «Вид», «Раздел» and «Справка».
+struct LedgerCommands: Commands {
+    @ObservedObject var gate: AppLock
+    private var open: Bool { gate.screen == .open }
+    private func send(_ command: LedgerCommand) { LedgerCommand.send(command.rawValue) }
+
+    var body: some Commands {
+        SidebarCommands()
+        CommandGroup(after: .appSettings) {
+            Button("Заблокировать") { gate.lock() }.keyboardShortcut("l", modifiers: [.command, .control]).disabled(!open)
+        }
+        CommandGroup(replacing: .newItem) {
+            Group {
+                Button("Новый расход") { send(.newExpense) }.keyboardShortcut("n")
+                Button("Новый доход") { send(.newIncome) }.keyboardShortcut("n", modifiers: [.command, .option])
+                Button("Новый перевод") { send(.newTransfer) }.keyboardShortcut("t", modifiers: [.command, .option])
+                Divider()
+                Button("Импорт выписки…") { send(.importStatements) }.keyboardShortcut("i")
+            }.disabled(!open)
+        }
+        CommandGroup(replacing: .saveItem) {
+            Group {
+                Button("Создать резервную копию") { send(.backup) }.keyboardShortcut("s")
+                Button("Восстановить из копии…") { send(.restore) }.keyboardShortcut("o", modifiers: [.command, .shift])
+            }.disabled(!open)
+        }
+        CommandGroup(replacing: .textEditing) {
+            Button("Найти…") { send(.search) }.keyboardShortcut("f").disabled(!open)
+        }
+        CommandGroup(before: .toolbar) {
+            Button("Обновить котировки") { send(.refreshQuotes) }.keyboardShortcut("r").disabled(!open)
+            Divider()
+        }
+        CommandMenu("Раздел") {
+            Group {
+                let pages = BankPage.sidebar.flatMap(\.pages)
+                ForEach(Array(pages.enumerated()), id: \.element) { index, page in
+                    if index < 9 {
+                        Button(page.rawValue) { LedgerCommand.send(page.rawValue) }
+                            .keyboardShortcut(KeyEquivalent(Character(String(index + 1))))
+                    } else {
+                        Button(page.rawValue) { LedgerCommand.send(page.rawValue) }
+                    }
+                }
+            }.disabled(!open)
+        }
+        CommandGroup(replacing: .help) {
+            Link("О приложении «Мои Финансы»", destination: URL(string: "https://github.com/Maicop14/moi-finansy-app#readme")!)
+        }
+    }
+}
+
+/// «Настройки…» (⌘,): only settings without amounts. While the app is locked they stay closed.
+struct MacSettings: View {
+    @ObservedObject var gate: AppLock
+    var body: some View {
+        Group {
+            if gate.screen == .open {
+                TabView {
+                    MacGeneralSettings(gate: gate).tabItem { Label("Основные", systemImage: "gearshape") }
+                    ScrollView { NotificationsPanel().padding(20) }
+                        .tabItem { Label("Уведомления", systemImage: "bell.badge") }
+                }
+            } else {
+                ContentUnavailableView("Приложение заблокировано", systemImage: "lock.fill",
+                                       description: Text("Войдите в «Мои Финансы», чтобы изменить настройки."))
+            }
+        }.frame(width: 500, height: 440)
+    }
+}
+
+private struct MacGeneralSettings: View {
+    @ObservedObject var gate: AppLock
+    @AppStorage(ProfileName.key) private var name = ""
+    @AppStorage("display.currency") private var displayCode = DisplayCurrency.rub.rawValue
+    var body: some View {
+        Form {
+            Section("Приветствие") {
+                TextField("Как к вам обращаться", text: Binding(get: { name }, set: { ProfileName.set($0) }), prompt: Text("Без имени"))
+                Text("«" + WelcomeScene.title(hour: Calendar.current.component(.hour, from: .now)) + "»").foregroundStyle(.secondary)
+            }
+            Section("Суммы") {
+                Picker("Показывать в", selection: $displayCode) {
+                    ForEach(DisplayCurrency.allCases) { Text($0.rawValue + " · " + $0.symbol).tag($0.rawValue) }
+                }
+            }
+            Section("Вход") {
+                LabeledContent("PIN", value: "4 цифры, только на этом Mac")
+                LabeledContent("Touch ID", value: gate.biometricLabel == nil ? "после входа по PIN" : "включён")
+                Text("Вход запрашивается при каждом запуске. Закрытие окна завершает приложение; свёрнутое окно остаётся открытым.")
+                    .font(.callout).foregroundStyle(.secondary)
+                Button("Заблокировать сейчас") { gate.lock() }
+            }
+        }.formStyle(.grouped)
+    }
+}
+#endif
+
+struct HoverOutline: ViewModifier {
+    let radius: CGFloat
+    let row: Bool
+    @State private var over = false
+    func body(content: Content) -> some View {
+        #if os(macOS)
+        content
+            .background { if row { RoundedRectangle(cornerRadius: radius).fill(Palette.accent.opacity(over ? 0.07 : 0)).padding(.horizontal, -6) } }
+            .overlay { if !row { RoundedRectangle(cornerRadius: radius).strokeBorder(Palette.accent.opacity(over ? 0.4 : 0), lineWidth: 1.5).allowsHitTesting(false) } }
+            .onHover { over = $0 }
+            .animation(.easeOut(duration: 0.12), value: over)
+        #else
+        content
+        #endif
+    }
+}
+
+enum Clipboard {
+    static func copy(_ text: String) {
+        #if os(macOS)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        #else
+        UIPasteboard.general.string = text
+        #endif
+    }
+}
+
 /// Colours of the «Ясный» design. Light mode uses them as is; dark mode keeps system colours.
 enum Palette {
     static let canvasLight = Color(red: 0xF4 / 255, green: 0xF6 / 255, blue: 0xFA / 255)
@@ -116,6 +281,16 @@ enum Palette {
 }
 
 extension View {
+    /// Mac: a light outline (or a row tint) under the pointer on clickable tiles. iPhone: unchanged.
+    func hoverOutline(_ radius: CGFloat = 20, row: Bool = false) -> some View { modifier(HoverOutline(radius: radius, row: row)) }
+    /// A right-click menu on the Mac; on iPhone the row keeps its usual tap and buttons.
+    @ViewBuilder func desktopMenu<Items: View>(@ViewBuilder _ items: () -> Items) -> some View {
+        #if os(macOS)
+        contextMenu(menuItems: items)
+        #else
+        self
+        #endif
+    }
     func bankTile(_ inset: CGFloat = 16) -> some View {
         padding(inset).frame(maxWidth: .infinity, alignment: .leading)
             .background(.background, in: RoundedRectangle(cornerRadius: 20))
@@ -208,79 +383,7 @@ struct Ledger: View {
 
     var body: some View {
         let list = accounts
-        HStack(spacing: 0) {
-            #if os(macOS)
-            VStack(alignment: .leading, spacing: 12) {
-                Label("Мои Финансы", systemImage: "wallet.bifold.fill").font(.title2.bold()).padding(.vertical, 16)
-                ForEach(BankPage.allCases, id: \.self) { tab in tabButton(tab) }
-                Spacer()
-            }.padding(12).frame(width: 208).background(.background)
-            Divider()
-            #endif
-            NavigationStack {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
-                        if page == .home {
-                            searchBar
-                            if query.isEmpty {
-                                #if os(macOS)
-                                ViewThatFits(in: .horizontal) {
-                                    HStack(alignment: .top, spacing: 20) {
-                                        VStack(alignment: .leading, spacing: 15) { home(list) }.frame(minWidth: 300)
-                                        capitalTrend.frame(minWidth: 280, maxWidth: 360)
-                                    }
-                                    VStack(alignment: .leading, spacing: 15) { home(list); capitalTrend }
-                                }
-                                #else
-                                home(list)
-                                #endif
-                            } else { searchResults(list) }
-                        } else {
-                            Text(page.rawValue).font(.largeTitle.bold())
-                            switch page {
-                            case .accounts:
-                                accountsList(showHidden ? list : list.filter { !hidden.contains($0.id) })
-                                if !hidden.isEmpty {
-                                    Toggle("Показать скрытые счета (" + String(hidden.count) + ")", isOn: $showHidden)
-                                }
-                            case .operations:
-                                SpendingBreakdownView(entries: entries, format: { display.format($0, prices: prices) }) { editingEntry = $0 }
-                                HStack {
-                                    Text("История").font(.headline)
-                                    Spacer()
-                                    Button("Импорт") { importing = true }.buttonStyle(.bordered)
-                                    Button("Добавить") { creating = .expense }.buttonStyle(.bordered)
-                                }
-                                if !importedNotice.isEmpty { Text(importedNotice).font(.caption) }
-                                operationRows(entries.filter { $0.cents > 0 }, accounts: list)
-                            case .charity: CharityScreen(entries: entries, accounts: list)
-                            case .recurring: RecurringScreen(accounts: list.filter { !hidden.contains($0.id) })
-                            case .budget: BudgetScreen(entries: entries)
-                            case .restore: RestoreScreen(makeBackup: makeBackup) { url in restoreURL = url; restoring = true }
-                            case .earnings: IncomeScreen(entries: entries, accounts: list) { creating = .income }
-                            case .investments:
-                                MarketView(accounts: list)
-                                LotsPanel(accounts: list).bankTile()
-                            case .loans:
-                                ProjectsSection(accounts: list)
-                                CardPaymentsSection(cards: list.filter { $0.position.debt && !hidden.contains($0.id) })
-                                debtSection(list, loans: true)
-                            case .receivables: debtSection(list, loans: false)
-                            case .capital:
-                                PortfolioOverview(accounts: list)
-                                PeriodPanel().bankTile()
-                                ProfileSection()
-                                NotificationsPanel().bankTile()
-                                BackupPanel().bankTile()
-                            case .home: EmptyView()
-                            }
-                        }
-                    }.padding(16).frame(maxWidth: 1240).frame(maxWidth: .infinity)
-                }.background(canvas)
-                .refreshable { if page == .home { await refreshQuotes(force: true) } }
-            }.id(page)
-            .overlay(alignment: .bottom) { QuickBackupBar(backup: quickBackup).animation(.snappy, value: quickBackup.phase) }
-        }
+        mainLayout(list)
         #if os(iOS)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             HStack(spacing: 0) {
@@ -288,20 +391,9 @@ struct Ledger: View {
             }.padding(.vertical, 5).background(.bar)
         }
         #else
-        .frame(minWidth: 680, minHeight: 520)
-        .toolbar {
-            ToolbarItemGroup {
-                Button {
-                    page = .home
-                    Task { @MainActor in await Task.yield(); searchFocused = true }
-                } label: { Label("Поиск", systemImage: "magnifyingglass") }
-                .keyboardShortcut("f")
-                .help("Поиск по счетам и операциям (⌘F)")
-                Button { creating = .expense } label: { Label("Новая операция", systemImage: "plus") }
-                    .keyboardShortcut("n", modifiers: [.command, .shift])
-                    .help("Новая операция (⇧⌘N)")
-            }
-        }
+        .frame(minWidth: 760, minHeight: 540)
+        .toolbar { macToolbar }
+        .onReceive(NotificationCenter.default.publisher(for: LedgerCommand.notification)) { perform($0.object as? String) }
         #endif
         .tint(Palette.accent)
         .overlay(alignment: .bottom) { if DemoMode.isOn { DemoCaption(text: DemoMode.caption(page.rawValue)).padding(.bottom, 74) } }
@@ -333,6 +425,8 @@ struct Ledger: View {
         }
         .dropDestination(for: URL.self) { urls, _ in
             guard !urls.isEmpty else { return false }
+            // A backup file dropped on the window opens the restore; statements go to the import.
+            if let copy = urls.first(where: { $0.pathExtension.lowercased() == "kdfin" }) { restoreURL = copy; restoring = true; return true }
             incoming = urls; importing = true; return true
         }
         .sheet(isPresented: $importing, onDismiss: { incoming = [] }) {
@@ -388,6 +482,153 @@ struct Ledger: View {
         } message: { Text($0.category + " · " + money($0.cents)) }
         .alert("Ошибка сохранения", isPresented: Binding(get: { !problem.isEmpty }, set: { if !$0 { problem = "" } })) { Button("ОК") {} } message: { Text(problem) }
     }
+
+    /// iPhone: one stack with the tab bar below. Mac: a native sidebar with every section and the page on the right.
+    @ViewBuilder private func mainLayout(_ list: [AccountBalance]) -> some View {
+        #if os(macOS)
+        NavigationSplitView {
+            List(selection: Binding<BankPage?>(get: { page }, set: { if let next = $0, next != page { query = ""; page = next } })) {
+                ForEach(BankPage.sidebar, id: \.title) { group in
+                    Section(group.title) {
+                        ForEach(group.pages) { tab in Label(tab.rawValue, systemImage: tab.icon).tag(tab) }
+                    }
+                }
+            }
+            .listStyle(.sidebar)
+            .navigationSplitViewColumnWidth(min: 200, ideal: 224, max: 300)
+        } detail: {
+            pageStack(list)
+        }
+        #else
+        pageStack(list)
+        #endif
+    }
+
+    private func pageStack(_ list: [AccountBalance]) -> some View {
+            NavigationStack {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        if page == .home {
+                            searchBar
+                            if query.isEmpty {
+                                #if os(macOS)
+                                ViewThatFits(in: .horizontal) {
+                                    HStack(alignment: .top, spacing: 20) {
+                                        VStack(alignment: .leading, spacing: 15) { home(list) }.frame(minWidth: 300)
+                                        capitalTrend.frame(minWidth: 280, maxWidth: 360)
+                                    }
+                                    VStack(alignment: .leading, spacing: 15) { home(list); capitalTrend }
+                                }
+                                #else
+                                home(list)
+                                #endif
+                            } else { searchResults(list) }
+                        } else {
+                            #if os(iOS)
+                            Text(page.rawValue).font(.largeTitle.bold())
+                            #endif
+                            switch page {
+                            case .accounts:
+                                accountsList(showHidden ? list : list.filter { !hidden.contains($0.id) })
+                                if !hidden.isEmpty {
+                                    Toggle("Показать скрытые счета (" + String(hidden.count) + ")", isOn: $showHidden)
+                                }
+                            case .operations:
+                                SpendingBreakdownView(entries: entries, format: { display.format($0, prices: prices) }) { editingEntry = $0 }
+                                HStack {
+                                    Text("История").font(.headline)
+                                    Spacer()
+                                    Button("Импорт") { importing = true }.buttonStyle(.bordered)
+                                    Button("Добавить") { creating = .expense }.buttonStyle(.bordered)
+                                }
+                                if !importedNotice.isEmpty { Text(importedNotice).font(.caption) }
+                                operationRows(entries.filter { $0.cents > 0 }, accounts: list)
+                            case .charity: CharityScreen(entries: entries, accounts: list)
+                            case .recurring: RecurringScreen(accounts: list.filter { !hidden.contains($0.id) })
+                            case .budget: BudgetScreen(entries: entries)
+                            case .restore: RestoreScreen(makeBackup: makeBackup) { url in restoreURL = url; restoring = true }
+                            case .earnings: IncomeScreen(entries: entries, accounts: list) { creating = .income }
+                            case .investments:
+                                MarketView(accounts: list)
+                                LotsPanel(accounts: list).bankTile()
+                            case .loans:
+                                ProjectsSection(accounts: list)
+                                CardPaymentsSection(cards: list.filter { $0.position.debt && !hidden.contains($0.id) })
+                                debtSection(list, loans: true)
+                            case .receivables: debtSection(list, loans: false)
+                            case .capital:
+                                PortfolioOverview(accounts: list)
+                                PeriodPanel().bankTile()
+                                ProfileSection()
+                                NotificationsPanel().bankTile()
+                                BackupPanel().bankTile()
+                            case .home: EmptyView()
+                            }
+                        }
+                    }.padding(Self.pagePadding).frame(maxWidth: 1240).frame(maxWidth: .infinity)
+                }.background(canvas)
+                #if os(iOS)
+                .refreshable { if page == .home { await refreshQuotes(force: true) } }
+                #else
+                .navigationTitle(page == .home ? "Мои Финансы" : page.rawValue)
+                #endif
+            }.id(page)
+            .overlay(alignment: .bottom) { QuickBackupBar(backup: quickBackup).animation(.snappy, value: quickBackup.phase) }
+    }
+    #if os(macOS)
+    private static let pagePadding: CGFloat = 24
+    #else
+    private static let pagePadding: CGFloat = 16
+    #endif
+
+    #if os(macOS)
+    /// The window toolbar: search, quotes and a new operation, the same actions as in the menu bar.
+    @ToolbarContentBuilder private var macToolbar: some ToolbarContent {
+        ToolbarItemGroup(placement: .primaryAction) {
+            Button { perform(LedgerCommand.refreshQuotes.rawValue) } label: { Label("Обновить котировки", systemImage: "arrow.clockwise") }
+                .help("Обновить котировки металлов и валют (⌘R)").disabled(quotesBusy)
+            Button { perform(LedgerCommand.search.rawValue) } label: { Label("Поиск", systemImage: "magnifyingglass") }
+                .help("Поиск по счетам и операциям (⌘F)")
+            Menu {
+                Button("Расход") { creating = .expense }
+                Button("Доход") { creating = .income }
+                Button("Перевод") { creating = .transfer }
+                Divider()
+                Button("Импорт выписки…") { importing = true }
+            } label: { Label("Новая операция", systemImage: "plus") } primaryAction: { creating = .expense }
+                .help("Новая операция (⌘N)")
+        }
+    }
+
+    /// Commands from the menu bar (see `LedgerCommands`). Sheets are not stacked: a command that opens one
+    /// waits until the current sheet is closed.
+    private func perform(_ raw: String?) {
+        guard let raw else { return }
+        if let target = BankPage(rawValue: raw) { query = ""; page = target; return }
+        guard let command = LedgerCommand(rawValue: raw) else { return }
+        let sheetOpen = importing || creating != nil || editingEntry != nil || selectedAccount != nil || newDebt != nil || restoring || askBackupPassword || askName
+        switch command {
+        case .search:
+            guard !sheetOpen else { return }
+            query = ""; page = .home
+            Task { @MainActor in await Task.yield(); searchFocused = true }
+        case .refreshQuotes:
+            page = .home
+            Task { await refreshQuotes(force: true) }
+        default:
+            guard !sheetOpen else { return }
+            switch command {
+            case .newExpense: creating = .expense
+            case .newIncome: creating = .income
+            case .newTransfer: creating = .transfer
+            case .importStatements: incoming = []; importing = true
+            case .backup: makeBackup()
+            case .restore: restoreURL = nil; restoring = true
+            default: break
+            }
+        }
+    }
+    #endif
 
     private func openPending() {
         #if os(iOS)
@@ -523,7 +764,7 @@ struct Ledger: View {
                 }
                 Text("Всё, что у тебя есть, включая долги тебе, минус кредитки и другие обязательства.")
                     .font(.caption2).foregroundStyle(Palette.secondary)
-            }.bankTile(12).animation(.snappy, value: displayCode)
+            }.bankTile(12).hoverOutline().animation(.snappy, value: displayCode)
         }.buttonStyle(.plain)
     }
 
@@ -534,7 +775,7 @@ struct Ledger: View {
                 Text(title).font(.subheadline).foregroundStyle(Palette.secondary)
                 Text(display.format(amount, prices: prices)).font(.headline).foregroundStyle(Palette.text).monospacedDigit().lineLimit(1).minimumScaleFactor(0.55)
                     .contentTransition(.numericText())
-            }.bankTile(12).animation(.snappy, value: displayCode)
+            }.bankTile(12).hoverOutline().animation(.snappy, value: displayCode)
         }.buttonStyle(.plain)
     }
 
@@ -617,8 +858,12 @@ struct Ledger: View {
                 }
                 Spacer()
                 Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
-            }.bankTile(13)
+            }.bankTile(13).hoverOutline()
         }.buttonStyle(.plain)
+        .desktopMenu {
+            Button("Открыть", action: action)
+            if let subtitle { Button("Копировать сумму") { Clipboard.copy(subtitle) } }
+        }
     }
 
     @ViewBuilder private func accountsList(_ list: [AccountBalance]) -> some View {
@@ -670,7 +915,14 @@ struct Ledger: View {
                         }.buttonStyle(.plain)
                         Button { removal = entry } label: { Image(systemName: "trash").foregroundStyle(.secondary) }
                             .buttonStyle(.borderless).disabled(entry.lotEventID != nil).accessibilityLabel("Удалить операцию")
-                    }.padding(.vertical, 9)
+                            .help("Удалить операцию")
+                    }.padding(.vertical, 9).hoverOutline(10, row: true)
+                    .desktopMenu {
+                        Button("Изменить…") { editingEntry = entry }.disabled(entry.lotEventID != nil)
+                        Button("Копировать сумму") { Clipboard.copy(money(entry.cents)) }
+                        Divider()
+                        Button("Удалить…", role: .destructive) { removal = entry }.disabled(entry.lotEventID != nil)
+                    }
                     Divider()
                 }
             }.bankTile()
@@ -815,3 +1067,51 @@ struct EntryForm: View {
         .alert("Не удалось сохранить операцию", isPresented: $failed) { Button("ОК") {} }
     }
 }
+
+#if SNAPSHOTS && os(macOS)
+/// Only in a screenshot build (`SWIFT_ACTIVE_COMPILATION_CONDITIONS=SNAPSHOTS`): walks the sections and saves
+/// the window as PNG files into the app’s temporary folder when launched with `-snapshots YES`. Never compiled into the real app.
+enum WindowSnapshots {
+    @MainActor static func run() {
+        guard UserDefaults.standard.bool(forKey: "snapshots") else { return }
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("snapshots").path
+        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(4))
+            @MainActor func main() -> NSWindow? { NSApp.windows.first { $0.frame.width >= 700 } }
+            @MainActor func shot(_ name: String, _ window: NSWindow?) {
+                // The window's own pixels through the system compositor (an app may read its own windows).
+                typealias Capture = @convention(c) (CGRect, UInt32, UInt32, UInt32) -> Unmanaged<CGImage>?
+                guard let window, let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "CGWindowListCreateImage") else { return }
+                let capture = unsafeBitCast(symbol, to: Capture.self)
+                guard let image = capture(.null, 1 << 3, UInt32(window.windowNumber), 1 << 0 | 1 << 3)?.takeRetainedValue() else { return }
+                let rep = NSBitmapImageRep(cgImage: image)
+                try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name + ".png"))
+            }
+            for _ in 0..<60 where main() == nil { try? await Task.sleep(for: .milliseconds(500)) }
+            // Visible on whichever desktop is in front, so the compositor has its pixels.
+            main()?.collectionBehavior.insert(.canJoinAllSpaces)
+            main()?.orderFrontRegardless()
+            NSApp.activate(ignoringOtherApps: true)
+            try? await Task.sleep(for: .seconds(2))
+            if !DemoMode.isOn { shot("00-lock", main()); return }
+            let pages = BankPage.sidebar.flatMap(\.pages)
+            for (i, page) in pages.enumerated() {
+                LedgerCommand.send(page.rawValue)
+                try? await Task.sleep(for: .seconds(2))
+                shot(String(format: "%02d", i + 1), main())
+            }
+            LedgerCommand.send(BankPage.home.rawValue)
+            let before = main()
+            if let menu = NSApp.mainMenu?.items.first?.submenu, let index = menu.items.firstIndex(where: { $0.keyEquivalent == "," }) {
+                menu.performActionForItem(at: index)
+            }
+            try? await Task.sleep(for: .seconds(1))
+            NSApp.windows.first { $0.isVisible && $0 !== before }?.collectionBehavior.insert(.canJoinAllSpaces)
+            NSApp.windows.first { $0.isVisible && $0 !== before }?.orderFrontRegardless()
+            try? await Task.sleep(for: .seconds(1))
+            shot("20-settings", NSApp.windows.first { $0.isVisible && $0 !== before && $0.frame.width > 300 })
+        }
+    }
+}
+#endif

@@ -349,7 +349,7 @@ private struct LockForm: View {
     private func digit(_ n: Int) -> some View {
         Button { press(n) } label: {
             Text(String(n)).font(.system(size: 32, weight: .medium)).monospacedDigit()
-                .frame(maxWidth: .infinity, minHeight: 52)
+                .frame(maxWidth: .infinity, minHeight: LockColumn.keyHeight)
                 .background(.white.opacity(0.86), in: RoundedRectangle(cornerRadius: 17))
                 .foregroundStyle(Color(red: 0.04, green: 0.13, blue: 0.21))
         }.buttonStyle(.plain).accessibilityIdentifier("pinKey" + String(n))
@@ -390,13 +390,13 @@ private struct LockForm: View {
                                 }
                                 GridRow {
                                     Button { if !digits.isEmpty { digits.removeLast() } } label: {
-                                        Image(systemName: "delete.left").frame(maxWidth: .infinity, minHeight: 52)
+                                        Image(systemName: "delete.left").frame(maxWidth: .infinity, minHeight: LockColumn.keyHeight)
                                     }.accessibilityLabel("Стереть цифру").keyboardShortcut(.delete, modifiers: [])
                                     digit(0)
                                     if gate.screen == .locked, let label = gate.biometricLabel {
                                         Button { Task { await gate.authenticate() } } label: {
                                             Image(systemName: label.contains("Face") ? "faceid" : "touchid").font(.title)
-                                                .frame(maxWidth: .infinity, minHeight: 52)
+                                                .frame(maxWidth: .infinity, minHeight: LockColumn.keyHeight)
                                         }.accessibilityLabel(label)
                                     } else { Color.clear.frame(height: 1).accessibilityHidden(true) }
                                 }
@@ -405,15 +405,44 @@ private struct LockForm: View {
                             Text(gate.message)
                             Button("Повторить") { gate.refresh() }
                         } else { ProgressView() }
-                    }.padding(24).frame(maxWidth: 440).frame(minHeight: min(area.size.height, 700))
-                    .frame(maxWidth: .infinity)
-                }
+                    }.modifier(LockColumn(height: area.size.height))
+                }.scrollBounceBehavior(.basedOnSize)
             }
         }.foregroundStyle(.white)
         .background(Color(red: 0.06, green: 0.17, blue: 0.25))
         .onChange(of: phase) { _, next in if next == .background { digits = ""; first = nil } }
         .onChange(of: gate.screen) { _, _ in digits = ""; first = nil }
+        #if os(macOS)
+        // On a Mac with Touch ID the system prompt opens right away; «Ввести PIN» closes it.
+        .task(id: gate.screen) {
+            guard gate.screen == .locked, gate.biometricLabel != nil else { return }
+            try? await Task.sleep(for: .milliseconds(450))
+            if gate.screen == .locked, NSApp.isActive { await gate.authenticate() }
+        }
+        #endif
     }
+}
+
+/// The PIN column: full width on iPhone; on the Mac a frosted panel in the middle of the photo,
+/// whatever the window size.
+private struct LockColumn: ViewModifier {
+    let height: CGFloat
+    #if os(macOS)
+    static let keyHeight: CGFloat = 44
+    func body(content: Content) -> some View {
+        content.fixedSize(horizontal: false, vertical: true).padding(28).frame(width: 360)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous).strokeBorder(.white.opacity(0.2)))
+            .environment(\.colorScheme, .dark)
+            .padding(24)
+            .frame(maxWidth: .infinity, minHeight: height)
+    }
+    #else
+    static let keyHeight: CGFloat = 52
+    func body(content: Content) -> some View {
+        content.padding(24).frame(maxWidth: 440).frame(minHeight: min(height, 700)).frame(maxWidth: .infinity)
+    }
+    #endif
 }
 
 /// Initials for the splash badge (and an optional default name), in `App/ArchiveResources/profile.json`.
@@ -480,6 +509,18 @@ struct WelcomeScreen: View {
         GeometryReader { size in
             ZStack {
                 BackdropPhoto(name: photo, size: size.size)
+                #if os(macOS)
+                // A wide window: the greeting in the middle, sized to the window.
+                VStack(spacing: 16) {
+                    Text(LocalProfile.initials).font(.title2.bold()).padding(12)
+                        .overlay(RoundedRectangle(cornerRadius: 14).stroke(.white.opacity(0.6)))
+                        .accessibilityHidden(true)
+                    Text(scene.title).font(.system(size: min(52, max(30, size.size.width / 22)), weight: .semibold))
+                        .multilineTextAlignment(.center)
+                        .accessibilityIdentifier("welcomeGreeting")
+                }.foregroundStyle(.white).shadow(color: .black.opacity(0.6), radius: 4, y: 1)
+                    .padding(32).frame(maxWidth: .infinity, maxHeight: .infinity)
+                #else
                 VStack(alignment: .leading, spacing: 14) {
                     Spacer().frame(height: size.size.height * 0.13)
                     Text(LocalProfile.initials).font(.headline.bold()).padding(10)
@@ -490,6 +531,7 @@ struct WelcomeScreen: View {
                     Spacer()
                 }.foregroundStyle(.white).shadow(color: .black.opacity(0.6), radius: 3, y: 1)
                     .padding(.horizontal, 22)
+                #endif
             }
         }.ignoresSafeArea().background(Color(red: 0.06, green: 0.17, blue: 0.25))
     }
@@ -514,6 +556,8 @@ struct LockedRoot: View {
         }
         #if os(macOS)
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in gate.activate() }
+        // A closed main window locks the app even if another window (Настройки) keeps it running.
+        .onDisappear { gate.lock() }
         #else
         // The app switcher snapshot still shows the splash, never the amounts.
         .background(PrivacyCover())
