@@ -15,6 +15,9 @@ permissions:
 jobs:
   codeql:
     name: CodeQL — безопасность и качество (Swift)
+    # GitHub CodeQL пока не поддерживает Swift 6.4 / Xcode 27, а Xcode 26 падает на этом коде с внутренней ошибкой
+    # компилятора. Запуск вручную (Actions → «Проверка кода» → Run workflow), когда GitHub добавит поддержку.
+    if: github.event_name == 'workflow_dispatch'
     runs-on: macos-26   # CodeQL анализирует Swift только с Xcode 26 и ниже
     permissions:
       contents: read
